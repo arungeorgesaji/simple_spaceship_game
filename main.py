@@ -1,5 +1,6 @@
 import pygame
 import os
+import sys
 import random
 
 pygame.font.init()
@@ -18,6 +19,9 @@ FPS = 60
 BULLET_VEL = 7
 MAX_BULLETS = 3
 
+PAUSED = False
+PAUSE_FONT = pygame.font.SysFont('sans', 72)
+
 w, h = 55, 40
 
 YELLOW_HIT = pygame.USEREVENT + 1
@@ -28,9 +32,17 @@ BORDER = pygame.Rect(WIDTH // 2 - 5, 0, 10, HEIGHT)
 CURRENT_DIFFICULTY = 1
 MAX_DIFFICULTY = 5
 
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
+
 try:
-    BULLET_HIT_SOUND = pygame.mixer.Sound(os.path.join('assets', 'Grenade+1.mp3'))
-    BULLET_FIRE_SOUND = pygame.mixer.Sound(os.path.join('assets', 'Gun+Silencer.mp3'))
+    BULLET_HIT_SOUND = pygame.mixer.Sound(resource_path(os.path.join('assets', 'Grenade+1.mp3')))
+    BULLET_FIRE_SOUND = pygame.mixer.Sound(resource_path(os.path.join('assets', 'Gun+Silencer.mp3')))
 except:
     print("Sound files not found - continuing without sound")
     BULLET_HIT_SOUND = None
@@ -42,14 +54,20 @@ WINNER_FONT = pygame.font.SysFont('sans', 100)
 VEL = 5
 AI_VEL = 3  
 
+CURRENT_VOLUME = 0.5  
+if BULLET_HIT_SOUND:
+    BULLET_HIT_SOUND.set_volume(CURRENT_VOLUME)
+if BULLET_FIRE_SOUND:
+    BULLET_FIRE_SOUND.set_volume(CURRENT_VOLUME)
+
 try:
-    yellow_spaceship = pygame.image.load(os.path.join('assets', 'spaceship_yellow.png'))
+    yellow_spaceship = pygame.image.load(resource_path(os.path.join('assets', 'spaceship_yellow.png')))
     yellow_spaceship = pygame.transform.rotate(pygame.transform.scale(yellow_spaceship, (w, h)), 90)
 
-    red_spaceship = pygame.image.load(os.path.join('assets', 'spaceship_red.png'))
+    red_spaceship = pygame.image.load(resource_path(os.path.join('assets', 'spaceship_red.png')))
     red_spaceship = pygame.transform.rotate(pygame.transform.scale(red_spaceship, (w, h)), 270)
 
-    SPACE = pygame.transform.scale(pygame.image.load(os.path.join('assets', 'space.png')), (WIDTH, HEIGHT))
+    SPACE = pygame.transform.scale(pygame.image.load(resource_path(os.path.join('assets', 'space.png'))), (WIDTH, HEIGHT))
 except:
     print("Image files not found - creating placeholder graphics")
     yellow_spaceship = pygame.Surface((w, h))
@@ -60,8 +78,16 @@ except:
     SPACE.fill((0, 0, 50))  
 
 def draw_window(red, yellow, red_bullets, yellow_bullets, red_health, yellow_health):
+    if PAUSED:
+        pause_text = PAUSE_FONT.render("PAUSED", 1, WHITE)
+        WIN.blit(pause_text, (WIDTH//2 - pause_text.get_width()//2, HEIGHT//2))
+        pygame.display.update()
+
     WIN.blit(SPACE, (0, 0))
     pygame.draw.rect(WIN, BLACK, BORDER)
+
+    volume_text = HEALTH_FONT.render(f"Vol: {int(CURRENT_VOLUME*100)}%", 1, WHITE)
+    WIN.blit(volume_text, (WIDTH//2 - volume_text.get_width()//2, 10))
 
     red_health_text = HEALTH_FONT.render("AI Health: " + str(red_health), 1, WHITE)
     yellow_health_text = HEALTH_FONT.render("Your Health: " + str(yellow_health), 1, WHITE)
@@ -134,46 +160,7 @@ def ai_movement(red, yellow, red_bullets, difficulty):
             BULLET_FIRE_SOUND.play()
 
 def video_game():
-    global CURRENT_DIFFICULTY
-    
-    while CURRENT_DIFFICULTY <= MAX_DIFFICULTY:
-        red = pygame.Rect(700, 300, w, h)
-        yellow = pygame.Rect(100, 300, w, h)
-        
-        red_bullets = []
-        yellow_bullets = []
-        
-        red_health = 10 + CURRENT_DIFFICULTY
-        yellow_health = 10
-        
-        clock = pygame.time.Clock()
-        run = True
-        
-        while run:
-            clock.tick(FPS)
-            
-            winner_text = ""
-            if red_health <= 0:
-                winner_text = f"You Win! Level {CURRENT_DIFFICULTY}"
-                CURRENT_DIFFICULTY += 1
-            elif yellow_health <= 0:
-                winner_text = "Game Over"
-                CURRENT_DIFFICULTY = 1  
-            
-            if winner_text:
-                draw_winner(winner_text)
-                break
-            
-            keys_pressed = pygame.key.get_pressed()
-            yellow_movement(keys_pressed, yellow)
-            ai_movement(red, yellow, red_bullets, CURRENT_DIFFICULTY)
-            
-        if CURRENT_DIFFICULTY > MAX_DIFFICULTY:
-            draw_winner("You Beat All Levels!")
-            break
-
-def video_game():
-    global CURRENT_DIFFICULTY
+    global CURRENT_DIFFICULTY, CURRENT_VOLUME, PAUSED
     
     while CURRENT_DIFFICULTY <= MAX_DIFFICULTY:
         red = pygame.Rect(700, 300, w, h)
@@ -192,11 +179,21 @@ def video_game():
             clock.tick(FPS)
             
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                     pygame.quit()
                     return
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE and len(yellow_bullets) < MAX_BULLETS:
+                    if event.key == pygame.K_p:  
+                        PAUSED = not PAUSED
+                    if event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                        CURRENT_VOLUME = min(1.0, CURRENT_VOLUME + 0.1)
+                        if BULLET_HIT_SOUND: BULLET_HIT_SOUND.set_volume(CURRENT_VOLUME)
+                        if BULLET_FIRE_SOUND: BULLET_FIRE_SOUND.set_volume(CURRENT_VOLUME)
+                    if event.key == pygame.K_MINUS:
+                        CURRENT_VOLUME = max(0.0, CURRENT_VOLUME - 0.1)
+                        if BULLET_HIT_SOUND: BULLET_HIT_SOUND.set_volume(CURRENT_VOLUME)
+                        if BULLET_FIRE_SOUND: BULLET_FIRE_SOUND.set_volume(CURRENT_VOLUME)
+                    if event.key == pygame.K_SPACE and len(yellow_bullets) < MAX_BULLETS and not PAUSED:
                         bullet = pygame.Rect(yellow.x + yellow.width, yellow.y + yellow.height//2 - 2, 10, 5)
                         yellow_bullets.append(bullet)
                         if BULLET_FIRE_SOUND:
@@ -206,11 +203,18 @@ def video_game():
                     red_health -= 1
                     if BULLET_HIT_SOUND:
                         BULLET_HIT_SOUND.play()
-                
                 if event.type == YELLOW_HIT:
                     yellow_health -= 1
                     if BULLET_HIT_SOUND:
                         BULLET_HIT_SOUND.play()
+            
+            if not PAUSED:
+                keys_pressed = pygame.key.get_pressed()
+                yellow_movement(keys_pressed, yellow)
+                ai_movement(red, yellow, red_bullets, CURRENT_DIFFICULTY)
+                handle_bullets(yellow_bullets, red_bullets, yellow, red)
+            
+            draw_window(red, yellow, red_bullets, yellow_bullets, red_health, yellow_health)
             
             winner_text = ""
             if red_health <= 0:
@@ -223,13 +227,6 @@ def video_game():
             if winner_text:
                 draw_winner(winner_text)
                 break
-            
-            keys_pressed = pygame.key.get_pressed()
-            yellow_movement(keys_pressed, yellow)
-            ai_movement(red, yellow, red_bullets, CURRENT_DIFFICULTY)
-            
-            handle_bullets(yellow_bullets, red_bullets, yellow, red)
-            draw_window(red, yellow, red_bullets, yellow_bullets, red_health, yellow_health)
         
         if CURRENT_DIFFICULTY > MAX_DIFFICULTY:
             draw_winner("You Beat All Levels!")
